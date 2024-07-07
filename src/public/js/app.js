@@ -1,56 +1,61 @@
-const ul = document.querySelector("ul");
-const nickform = document.querySelector("#nick");
-const messageform = document.querySelector("#message");
+const socket = io();
 
-const socket = new WebSocket(`wss://${window.location.host}`);
+const welcome = document.getElementById("welcome")
+const form = welcome.querySelector("form");
+const room = document.getElementById("room");
 
-function makeMessage(type, payload) {
-    const msg = { type, payload};
-    return JSON.stringify(msg);
-}
+room.hidden = true;
 
-function handleOpen() {
-    console.log("Connected to Server");
-}
-socket.addEventListener("open", handleOpen);
+let roomName;
 
-socket.addEventListener("message", (message) => {
-    if (message.data instanceof Blob) {
-        const reader = new FileReader();
-        reader.onload = function() {
-            const li = document.createElement("li");
-            li.innerText = reader.result;
-            ul.append(li);
-        };
-        reader.readAsText(message.data);
-    } else {
-        const li = document.createElement("li");
-        li.innerText = message.data;
-        ul.append(li);
-    }
-});
-
-socket.addEventListener("close", () => {
-    console.log("Disconnected from the Browser");
-});
-
-function handleSubmit(event){
-    event.preventDefault();
-    const input = messageform.querySelector("input");
-    socket.send(makeMessage("new_message", input.value));
+function addMessage(message){
+    const ul = room.querySelector("ul");
     const li = document.createElement("li");
-    li.innerText = `You: ${input.value}`;
-    messageList.append(li);
+    li.innerText = message;
+    ul.appendChild(li);
+}
+
+function handleMessageSubmit(event){
+    event.preventDefault();
+    const input = room.querySelector("input");
+    const message = input.value;
+    socket.emit("new_message", message, roomName, () => {addMessage(`You: ${message}`);
+        input.value=""});
+}
+
+function showRoom() {
+    if (!room) {
+        console.error("Room element not found in the DOM.");
+        return;
+    }
+
+    welcome.hidden = true;
+    room.hidden = false;
+    const h3 = room.querySelector("h3");
+    if (h3) {
+        h3.innerText = `Room ${roomName}`;
+    } else {
+        console.error("h3 element not found in the room.");
+    }
+    const messageForm = room.querySelector("form");
+    messageForm.addEventListener("submit", handleMessageSubmit);
+}
+
+function handleRoomSubmit(event){
+    event.preventDefault();
+    const input = form.querySelector("input");
+    roomName = input.value;
+    socket.emit("enter_room", roomName, showRoom);
     input.value = "";
 }
+form.addEventListener("submit", handleRoomSubmit);
 
-function handleNickSubmit(event){
-    event.preventDefault();
-    const input = nickform.querySelector("input");
-    socket.send(makeMessage("nickname", input.value));
-    input.value="";
-}
+socket.on("welcome", (user) => {
+    addMessage(`${user} joined the room!`);
+});
 
-messageform.addEventListener("submit", handleSubmit);
-nickform.addEventListener("submit", handleNickSubmit);
+socket.on("bye", (user) => {
+    addMessage(`${user}Someone left ㅠㅠ`);
+});
 
+socket.on("new_message", addMessage);
